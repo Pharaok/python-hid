@@ -1,4 +1,6 @@
-__pycache__/
+
 *.txt
+__pycache__/
 test/
+test.py
 
