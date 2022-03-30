@@ -1,28 +1,47 @@
 from __future__ import annotations
 
 from typing import Optional, Sequence
+from collections import defaultdict
 
 
-class KeyCode():
+class Modifier():
+    NONE = 0x00
+    LEFT_CONTROL = 0x01
+    LEFT_SHIFT = 0x02
+    LEFT_ALT = 0x04
+    LEFT_GUI = 0x08
+    RIGHT_CONTROL = 0x10
+    RIGHT_SHIFT = 0x20
+    RIGHT_ALT = 0x40
+    RIGHT_GUI = 0x80
+
     def __class_getitem__(cls, key: str):
-        if not isinstance(key, str):
-            raise TypeError
-        if len(key) != 1:
-            raise ValueError
+        keys = defaultdict(lambda: cls.NONE)
+        keys |= {chr(ord('A') + i): cls.LEFT_SHIFT for i in range(26)}
+        keys |= {c: cls.LEFT_SHIFT for c in ['!@#$%^&*()']}
+        keys |= {c: cls.LEFT_SHIFT for c in ['_+{}|']}
+        keys |= {c: cls.LEFT_SHIFT for c in [':"~<>?']}
 
-        _chars = {' ': 0x2C}
-        _chars |= {chr(ord('a') + i): 0x04 + i for i in range(26)}
-        _chars |= {chr(ord('A') + i): 0x04 + i for i in range(26)}
-        _chars |= {c: 0x1E + i for i, c in enumerate('1234567890')}
-        _chars |= {c: 0x1A + i for i, c in enumerate('!@#$%^&*()')}
-        _chars |= {c: 0x2D + i for i, c in enumerate('-=[]\\')}
-        _chars |= {c: 0x2D + i for i, c in enumerate('_+{}|')}
-        _chars |= {c: 0x33 + i for i, c in enumerate(";'`,./")}
-        _chars |= {c: 0x33 + i for i, c in enumerate(':"~<>?')}
+        return keys[key]
 
-        return _chars[key]
 
-    NULL = 0x00
+class KeyCodes():
+    def __class_getitem__(cls, key: str):
+        keys = {k: v for k, v in cls.__dict__.items()
+                if not k.startswith('_')}
+        keys |= {' ': 0x2C}
+        keys |= {chr(ord('a') + i): 0x04 + i for i in range(26)}
+        keys |= {chr(ord('A') + i): 0x04 + i for i in range(26)}
+        keys |= {c: 0x1E + i for i, c in enumerate('1234567890')}
+        keys |= {c: 0x1A + i for i, c in enumerate('!@#$%^&*()')}
+        keys |= {c: 0x2D + i for i, c in enumerate('-=[]\\')}
+        keys |= {c: 0x2D + i for i, c in enumerate('_+{}|')}
+        keys |= {c: 0x33 + i for i, c in enumerate(";'`,./")}
+        keys |= {c: 0x33 + i for i, c in enumerate(':"~<>?')}
+
+        return keys[key]
+
+    NONE = 0x00
     ERROR_ROLL_OVER = 0x01
     POST_FAIL = 0x02
     ERROR_UNDEFINED = 0x03
@@ -87,7 +106,7 @@ class KeyCode():
 
 
 class KeyList():
-    def __init__(self, keys: Sequence[KeyCode] = [], /) -> None:
+    def __init__(self, keys: Sequence[KeyCodes] = [], /) -> None:
         self._keys = [0] * 6
         for i in range(len(keys)):
             self._keys[i] = keys[i]
