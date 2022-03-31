@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence
 from collections import defaultdict
+from typing import Any, Optional, Sequence
 
 
 class Modifier():
@@ -95,27 +95,41 @@ class KeyCode():
     def __format__(self, x: str) -> str:
         return format(self._key_code, x)
 
+    def __eq__(self, x: Any) -> bool:
+        return self._key_code == (x._key_code if isinstance(x, KeyCode) else x)
+
 
 class KeyArray():
+    LEN = 6
+
     def __init__(self, keys: Optional[KeyArray | Sequence[KeyCode]] = None) -> None:
         if keys is None:
             keys = []
         elif isinstance(keys, KeyArray):
             keys = keys._keys[:keys._i]
-        self._keys = [KeyCode() for _ in range(6)]
+        self._keys = [KeyCode() for _ in range(self.LEN)]
         self._i = 0
         self.press(*keys)
 
     def press(self, *keys: KeyCode) -> None:
         for key in keys:
             if key in self._keys:
-                raise ValueError(
-                    f"Cannot press already pressed key: 0x{key:02X}")
+                continue
             self._keys[self._i] = key
             self._i += 1
 
     def release(self, *keys: KeyCode) -> None:
-        pass
+        # Replace keys to release with NONE KeyCode
+        for key in keys:
+            try:
+                i = self._keys.index(key)
+            except ValueError:
+                i = None
+            if i is None:
+                continue
+            self._keys[i] = KeyCodes.NONE
+        # Move all NONE KeyCodes to the end
+        self._keys.sort(key=lambda x: x == KeyCodes.NONE)
 
     def __str__(self) -> str:
         return f"[{', '.join([str(k) for k in self._keys])}]"
