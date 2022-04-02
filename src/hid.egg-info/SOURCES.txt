@@ -1,0 +1,9 @@
+pyproject.toml
+setup.cfg
+setup.py
+src/hid/__init__.py
+src/hid/keyboard.py
+src/hid.egg-info/PKG-INFO
+src/hid.egg-info/SOURCES.txt
+src/hid.egg-info/dependency_links.txt
+src/hid.egg-info/top_level.txt

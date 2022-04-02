@@ -1,25 +1,25 @@
 from __future__ import annotations
 
-from collections import defaultdict
 import string
-from typing import Any, Optional, Sequence, SupportsInt
+from collections import defaultdict
+from typing import Optional, SupportsInt
 
 
 class Modifier():
-    def __init__(self, x: Modifier | int = 0) -> None:
+    def __init__(self, x: SupportsInt = 0) -> None:
         self._mod = int(x)
-
-    def __repr__(self) -> str:
-        return repr(self._mod)
-
-    def __format__(self, x: str) -> str:
-        return format(self._mod, x)
-
-    def __bool__(self) -> bool:
-        return bool(self._mod)
 
     def __int__(self) -> int:
         return self._mod
+
+    def __repr__(self) -> str:
+        return repr(int(self))
+
+    def __format__(self, x: str) -> str:
+        return format(int(self), x)
+
+    def __bool__(self) -> bool:
+        return bool(int(self))
 
     def __invert__(self) -> Modifier:
         return Modifier(~int(self))
@@ -43,10 +43,10 @@ class Modifier():
         return Modifier(int(x) ^ int(self))
 
     def __rshift__(self, x: SupportsInt) -> Modifier:
-        return Modifier(self._mod >> x)
+        return Modifier(int(self) >> int(x))
 
     def __lshift__(self, x: SupportsInt) -> Modifier:
-        return Modifier(self._mod << x)
+        return Modifier(int(self) << int(x))
 
 
 class Modifiers():
@@ -100,32 +100,33 @@ class KeyCode():
     def __int__(self) -> int:
         return self._key_code
 
-    def __eq__(self, x: Any) -> bool:
+    def __eq__(self, x: SupportsInt) -> bool:
         return int(self) == int(x)
 
 
 class KeyArray():
     LEN = 6
 
-    def __init__(self, keys: Optional[KeyArray | Sequence[KeyCode]] = None) -> None:
-        if keys is None:
-            keys = []
-        elif isinstance(keys, KeyArray):
-            keys = keys._keys[:keys._i]
+    def __init__(self, keys: Optional[list[SupportsInt]] = None) -> None:
+        keys = keys or []
         self._keys = [KeyCode() for _ in range(self.LEN)]
         self._i = 0
         self.press(*keys)
 
-    def press(self, *keys: KeyCode) -> None:
+    def press(self, *keys: SupportsInt) -> None:
         for key in keys:
-            if key in self._keys:
+            if key == KeyCodes.NULL:
+                continue
+            elif key in self:
                 continue
             self._keys[self._i] = key
             self._i += 1
 
-    def release(self, *keys: KeyCode) -> None:
+    def release(self, *keys: SupportsInt) -> None:
         # Replace keys to release with NONE KeyCode
         for key in keys:
+            if key == KeyCodes.NULL:
+                continue
             try:
                 i = self._keys.index(key)
             except ValueError:
