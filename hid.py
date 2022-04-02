@@ -1,49 +1,50 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Optional, Sequence
+from typing import Any, Optional, Sequence, SupportsInt
 
 
 class Modifier():
     def __init__(self, x: Modifier | int = 0) -> None:
-        self._mod = x._mod if isinstance(x, Modifier) else x
+        self._mod = int(x)
 
-    def __str__(self) -> str:
-        return str(self._mod)
+    def __repr__(self) -> str:
+        return repr(self._mod)
 
     def __format__(self, x: str) -> str:
         return format(self._mod, x)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self._mod)
 
+    def __int__(self) -> int:
+        return self._mod
+
     def __invert__(self) -> Modifier:
-        return Modifier(~self._mod)
+        return Modifier(~int(self))
 
-    def __or__(self, x: Modifier | int) -> Modifier:
-        n = x._mod if isinstance(x, Modifier) else x
-        return Modifier(self._mod | n)
+    def __or__(self, x:  SupportsInt) -> Modifier:
+        return Modifier(int(self) | int(x))
 
-    def __ror__(self, x: Modifier | int) -> Modifier:
-        return self | x
+    def __ror__(self, x: SupportsInt) -> Modifier:
+        return Modifier(int(x) | int(self))
 
-    def __and__(self, x: Modifier | int) -> Modifier:
-        n = x._mod if isinstance(x, Modifier) else x
-        return Modifier(self._mod & n)
+    def __and__(self, x: SupportsInt) -> Modifier:
+        return Modifier(int(self) & int(x))
 
-    def __rand__(self, x: Modifier | int) -> Modifier:
-        return self & x
+    def __rand__(self, x: SupportsInt) -> Modifier:
+        return Modifier(int(x) & int(self))
 
-    def __xor__(self, x: Modifier | int) -> Modifier:
-        return Modifier(self._mod ^ (x._mod if isinstance(x, Modifier) else x))
+    def __xor__(self, x: SupportsInt) -> Modifier:
+        return Modifier(int(self) ^ int(x))
 
-    def __rxor__(self, x: Modifier | int) -> Modifier:
-        return self ^ x
+    def __rxor__(self, x: SupportsInt) -> Modifier:
+        return Modifier(int(x) ^ int(self))
 
-    def __rshift__(self, x: int) -> Modifier:
+    def __rshift__(self, x: SupportsInt) -> Modifier:
         return Modifier(self._mod >> x)
 
-    def __lshift__(self, x: int) -> Modifier:
+    def __lshift__(self, x: SupportsInt) -> Modifier:
         return Modifier(self._mod << x)
 
 
@@ -60,7 +61,7 @@ class Modifiers():
 
     def __class_getitem__(cls, key: str) -> Modifier:
         keys = defaultdict(lambda: cls.NONE)
-        keys |= {k: v for k, v in cls.__dict__.items()}
+        keys |= {k: v for k, v in cls.__dict__.items() if not k.startswith('_')}
         keys |= {chr(ord('A') + i): cls.LEFT_SHIFT for i in range(26)}
         keys |= {c: cls.LEFT_SHIFT for c in ['!@#$%^&*()']}
         keys |= {c: cls.LEFT_SHIFT for c in ['_+{}|']}
@@ -69,34 +70,37 @@ class Modifiers():
         return Modifier(keys[key])
 
 
-class ModifierBitField(Modifier):
-    def press(self, *mods: Modifier | int) -> None:
+class ModifierBitArray(Modifier):
+    def press(self, *mods: SupportsInt) -> None:
         for mod in mods:
             if self & mod:
                 raise ValueError(
                     f"Cannot release already released modifier: {mod}")
             self |= mod
 
-    def release(self, *mods: Modifier | int) -> None:
+    def release(self, *mods: SupportsInt) -> None:
         for mod in mods:
-            if self & ~mod:
+            if not self & mod:
                 raise ValueError(
                     f"Cannot release already released modifier: {mod}")
             self &= ~mod
 
 
 class KeyCode():
-    def __init__(self, x: KeyCode | int = 0) -> None:
-        self._key_code = x._key_code if isinstance(x, KeyCode) else x
+    def __init__(self, x: SupportsInt = 0) -> None:
+        self._key_code = int(x)
 
-    def __str__(self) -> str:
-        return str(self._key_code)
+    def __repr__(self) -> str:
+        return repr(int(self))
 
     def __format__(self, x: str) -> str:
-        return format(self._key_code, x)
+        return format(int(self), x)
+
+    def __int__(self) -> int:
+        return self._key_code
 
     def __eq__(self, x: Any) -> bool:
-        return self._key_code == (x._key_code if isinstance(x, KeyCode) else x)
+        return int(self) == int(x)
 
 
 class KeyArray():
@@ -131,11 +135,14 @@ class KeyArray():
         # Move all NONE KeyCodes to the end
         self._keys.sort(key=lambda x: x == KeyCodes.NONE)
 
-    def __str__(self) -> str:
-        return f"[{', '.join([str(k) for k in self._keys])}]"
+    def __iter__(self) -> list[int]:
+        return iter(self._keys)
+
+    def __repr__(self) -> str:
+        return repr(self._keys)
 
     def __format__(self, x: str) -> str:
-        return format(self._keys, x)
+        return format(list(self), x)
 
 
 class KeyCodes():
