@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import string
 from typing import Any, Optional, Sequence, SupportsInt
 
 
@@ -49,7 +50,7 @@ class Modifier():
 
 
 class Modifiers():
-    NONE = Modifier(0x00)
+    NULL = Modifier(0x00)
     LEFT_CONTROL = Modifier(0x01)
     LEFT_SHIFT = Modifier(0x02)
     LEFT_ALT = Modifier(0x04)
@@ -60,7 +61,7 @@ class Modifiers():
     RIGHT_GUI = Modifier(0x80)
 
     def __class_getitem__(cls, key: str) -> Modifier:
-        keys = defaultdict(lambda: cls.NONE)
+        keys = defaultdict(lambda: cls.NULL)
         keys |= {k: v for k, v in cls.__dict__.items() if not k.startswith('_')}
         keys |= {chr(ord('A') + i): cls.LEFT_SHIFT for i in range(26)}
         keys |= {c: cls.LEFT_SHIFT for c in ['!@#$%^&*()']}
@@ -131,9 +132,9 @@ class KeyArray():
                 i = None
             if i is None:
                 continue
-            self._keys[i] = KeyCodes.NONE
+            self._keys[i] = KeyCodes.NULL
         # Move all NONE KeyCodes to the end
-        self._keys.sort(key=lambda x: x == KeyCodes.NONE)
+        self._keys.sort(key=lambda x: x == KeyCodes.NULL)
 
     def __iter__(self) -> list[int]:
         return iter(self._keys)
@@ -146,25 +147,39 @@ class KeyArray():
 
 
 class KeyCodes():
-    def __class_getitem__(cls, key: KeyCode | str):
-        if isinstance(key, KeyCode):
-            return key
+    _kb = {None: 0x00}
+    _kb |= {c: 0x04 + i for i, c in enumerate(string.ascii_lowercase)}
+    _kb |= {c: 0x04 + i for i, c in enumerate(string.ascii_uppercase)}
+    _kb |= {c: 0x1E + i for i, c in enumerate('1234567890')}
+    _kb |= {c: 0x1A + i for i, c in enumerate('!@#$%^&*()')}
+    _kb |= {c: 0x28 + i for i, c in enumerate('\n\x1B\x08\x2A\t ')}
+    _kb |= {c: 0x2D + i for i, c in enumerate('-=[]\\')}
+    _kb |= {c: 0x2D + i for i, c in enumerate('_+{}|')}
+    _kb |= {c: 0x33 + i for i, c in enumerate(";'`,./")}
+    _kb |= {c: 0x33 + i for i, c in enumerate(':"~<>?')}
+    _kb |= {'\x7F': 0x4C}
 
+    _np = {c: 0x54 + i for i, c in enumerate('\*-+\n1234567890.')}
+
+    def __class_getitem__(cls, key: str):
+        return cls.keyboard(key)
+
+    @classmethod
+    def keyboard(cls, key: str):
         keys = {k: v for k, v in cls.__dict__.items()
                 if not k.startswith('_')}
-        keys |= {None: 0x00, ' ': 0x2C}
-        keys |= {chr(ord('a') + i): 0x04 + i for i in range(26)}
-        keys |= {chr(ord('A') + i): 0x04 + i for i in range(26)}
-        keys |= {c: 0x1E + i for i, c in enumerate('1234567890')}
-        keys |= {c: 0x1A + i for i, c in enumerate('!@#$%^&*()')}
-        keys |= {c: 0x2D + i for i, c in enumerate('-=[]\\')}
-        keys |= {c: 0x2D + i for i, c in enumerate('_+{}|')}
-        keys |= {c: 0x33 + i for i, c in enumerate(";'`,./")}
-        keys |= {c: 0x33 + i for i, c in enumerate(':"~<>?')}
-
+        keys |= cls._kb
         return KeyCode(keys[key])
 
-    NONE = KeyCode(0x00)
+    @classmethod
+    def numpad(cls, key: str):
+        keys = {k: v for k, v in cls.__dict__.items()
+                if not k.startswith('_')}
+        keys |= cls._kb
+        keys |= cls._np
+        return KeyCode(keys[key])
+
+    NULL = KeyCode(0x00)
     ERROR_ROLL_OVER = KeyCode(0x01)
     POST_FAIL = KeyCode(0x02)
     ERROR_UNDEFINED = KeyCode(0x03)
@@ -204,24 +219,14 @@ class KeyCodes():
     NUMPAD_SUB = KeyCode(0x56)
     NUMPAD_ADD = KeyCode(0x57)
     NUMPAD_ENTER = KeyCode(0x58)
-    NUMPAD_1 = KeyCode(0x59)
     NUMPAD_END = KeyCode(0x59)
-    NUMPAD_2 = KeyCode(0x5A)
     NUMPAD_DOWN_ARROW = KeyCode(0x5A)
-    NUMPAD_3 = KeyCode(0x5B)
     NUMPAD_PAGE_DOWN = KeyCode(0x5B)
-    NUMPAD_4 = KeyCode(0x5C)
     NUMPAD_LEFT_ARROW = KeyCode(0x5C)
-    NUMPAD_5 = KeyCode(0x5D)
-    NUMPAD_6 = KeyCode(0x5E)
     NUMPAD_RIGHT_ARROW = KeyCode(0x5E)
-    NUMPAD_7 = KeyCode(0x5F)
     NUMPAD_HOME = KeyCode(0x5F)
-    NUMPAD_8 = KeyCode(0x60)
     NUMPAD_UP_ARROW = KeyCode(0x60)
-    NUMPAD_9 = KeyCode(0x61)
     NUMPAD_PAGE_UP = KeyCode(0x61)
-    NUMPAD_0 = KeyCode(0x62)
     NUMPAD_INSERT = KeyCode(0x62)
     NUMPAD_PERIOD = KeyCode(0x63)
     NUMPAD_DELETE = KeyCode(0x63)
