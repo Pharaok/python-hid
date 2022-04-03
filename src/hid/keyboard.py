@@ -3,7 +3,7 @@ from __future__ import annotations
 import string
 from collections import defaultdict
 from collections.abc import Sequence
-from typing import Optional
+from typing import Iterator, Optional
 
 
 class Modifiers():
@@ -114,20 +114,28 @@ class KeyCodes():
     APPLICATION = 0x65
 
 
-class KeyArray():
-    LEN = 6
+class KeyboardReport():
+    MAX_KEYS = 6
 
-    def __init__(self, keys: Optional[Sequence[int]] = None) -> None:
-        self._keys = [0] * self.LEN
+    def __init__(self, mods: Optional[Sequence[int]] = None, keys: Optional[Sequence[int]] = None) -> None:
+        mods = mods or []
+        keys = keys or []
+
+        self._mods = 0
+        self.press_mod(*mods)
+        self._keys = [0] * self.MAX_KEYS
         self._i = 0
-        if keys:
-            self.press(*keys)
+        self.press_key(*keys)
 
     @property
-    def keys(self) -> None:
+    def mods(self) -> int:
+        return self._mods
+
+    @property
+    def keys(self) -> list[int]:
         return self._keys
 
-    def press(self, *keys: int) -> None:
+    def press_key(self, *keys: int):
         for key in keys:
             if key == KeyCodes.NULL:
                 continue
@@ -136,7 +144,7 @@ class KeyArray():
             self._keys[self._i] = key
             self._i += 1
 
-    def release(self, *keys: int) -> None:
+    def release_key(self, *keys: int):
         # Replace keys with NONE KeyCode
         for key in keys:
             if key == KeyCodes.NULL:
@@ -151,29 +159,6 @@ class KeyArray():
         # Move all NONE KeyCodes to the end
         self._keys.sort(key=lambda x: x == KeyCodes.NULL)
 
-
-class KeyboardReport():
-    def __init__(self, mods: Optional[Sequence[int]] = None, keys: Optional[Sequence[int]] = None) -> None:
-        if keys is None:
-            keys = []
-        self._mods = 0
-        self.press_mod(*mods)
-        self._keys = KeyArray(keys)
-
-    @property
-    def mods(self) -> int:
-        return self._mods
-
-    @property
-    def keys(self) -> KeyArray:
-        return self._keys
-
-    def press_key(self, *keys: int):
-        self.keys.press(*keys)
-
-    def release_key(self, *keys: int):
-        self.keys.release(*keys)
-
     def press_mod(self, *mods: int):
         for mod in mods:
             self._mods |= mod
@@ -181,6 +166,15 @@ class KeyboardReport():
     def release_mod(self, *mods: int):
         for mod in mods:
             self._mods &= ~mod
+
+    def __eq__(self, x: KeyboardReport) -> bool:
+        return (self._mods, self._keys) == (x._mods, self._keys)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self._mods}, {self._keys})"
+
+    def __str__(self) -> str:
+        return f"{self._mods:02X} 00 {' '.join([f'{key:02X}' for key in self._keys])}"
 
 
 class Keyboard(KeyboardReport):
