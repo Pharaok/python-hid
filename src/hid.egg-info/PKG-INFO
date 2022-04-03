@@ -4,6 +4,7 @@ Version: 0.0.1
 Summary: UNKNOWN
 License: UNKNOWN
 Platform: linux
+Provides-Extra: testing
 
 UNKNOWN
 
