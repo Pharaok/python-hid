@@ -11,7 +11,7 @@ class Modifiers():
     LEFT_CONTROL = 0x01
     LEFT_SHIFT = 0x02
     LEFT_ALT = 0x04
-    LEFT_GUI = 0x08   
+    LEFT_GUI = 0x08
     RIGHT_CONTROL = 0x10
     RIGHT_SHIFT = 0x20
     RIGHT_ALT = 0x40
@@ -27,40 +27,6 @@ class Modifiers():
 
         return keys[key]
 
-
-
-class KeyArray():
-    LEN = 6
-
-    def __init__(self, keys: Optional[Sequence[int]] = None) -> None:
-        self.keys = [0] * self.LEN
-        self._i = 0
-        if keys:
-            self.press(*keys)
-
-    def press(self, *keys: int) -> None:
-        for key in keys:
-            if key == KeyCodes.NULL:
-                continue
-            elif key in self.keys:
-                continue
-            self.keys[self._i] = key
-            self._i += 1
-
-    def release(self, *keys: int) -> None:
-        # Replace keys with NONE KeyCode
-        for key in keys:
-            if key == KeyCodes.NULL:
-                continue
-            try:
-                i = self.keys.index(key)
-            except ValueError:
-                i = None
-            if i is None:
-                continue
-            self.keys[i] = KeyCodes.NULL
-        # Move all NONE KeyCodes to the end
-        self.keys.sort(key=lambda x: x == KeyCodes.NULL)
 
 class KeyCodes():
     _kb = {c: 0x04 + i for i, c in enumerate(string.ascii_lowercase)}
@@ -148,8 +114,73 @@ class KeyCodes():
     APPLICATION = 0x65
 
 
+class KeyArray():
+    LEN = 6
+
+    def __init__(self, keys: Optional[Sequence[int]] = None) -> None:
+        self._keys = [0] * self.LEN
+        self._i = 0
+        if keys:
+            self.press(*keys)
+
+    @property
+    def keys(self) -> None:
+        return self._keys
+
+    def press(self, *keys: int) -> None:
+        for key in keys:
+            if key == KeyCodes.NULL:
+                continue
+            elif key in self._keys:
+                continue
+            self._keys[self._i] = key
+            self._i += 1
+
+    def release(self, *keys: int) -> None:
+        # Replace keys with NONE KeyCode
+        for key in keys:
+            if key == KeyCodes.NULL:
+                continue
+            try:
+                i = self._keys.index(key)
+            except ValueError:
+                i = None
+            if i is None:
+                continue
+            self._keys[i] = KeyCodes.NULL
+        # Move all NONE KeyCodes to the end
+        self._keys.sort(key=lambda x: x == KeyCodes.NULL)
+
+
 class KeyboardReport():
-    pass
+    def __init__(self, mods: Optional[Sequence[int]] = None, keys: Optional[Sequence[int]] = None) -> None:
+        if keys is None:
+            keys = []
+        self._mods = 0
+        self.press_mod(*mods)
+        self._keys = KeyArray(keys)
+
+    @property
+    def mods(self) -> int:
+        return self._mods
+
+    @property
+    def keys(self) -> KeyArray:
+        return self._keys
+
+    def press_key(self, *keys: int):
+        self.keys.press(*keys)
+
+    def release_key(self, *keys: int):
+        self.keys.release(*keys)
+
+    def press_mod(self, *mods: int):
+        for mod in mods:
+            self._mods |= mod
+
+    def release_mod(self, *mods: int):
+        for mod in mods:
+            self._mods &= ~mod
 
 
 class Keyboard(KeyboardReport):
