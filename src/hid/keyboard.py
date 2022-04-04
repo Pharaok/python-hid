@@ -3,7 +3,7 @@ from __future__ import annotations
 import string
 from collections import defaultdict
 from collections.abc import Sequence
-from typing import Iterator, Optional
+from typing import Any, Optional
 
 
 class Modifiers():
@@ -167,7 +167,9 @@ class KeyboardReport():
         for mod in mods:
             self._mods &= ~mod
 
-    def __eq__(self, x: KeyboardReport) -> bool:
+    def __eq__(self, x: Any) -> bool:
+        if not isinstance(x, KeyboardReport):
+            return NotImplemented
         return (self._mods, self._keys) == (x._mods, self._keys)
 
     def __repr__(self) -> str:
@@ -177,5 +179,44 @@ class KeyboardReport():
         return f"{self._mods:02X} 00 {' '.join([f'{key:02X}' for key in self._keys])}"
 
 
+
 class Keyboard(KeyboardReport):
-    pass
+    FUNCTION = {
+        "protocol": "1",
+        "subclass": "1",
+        "report_length": "8",
+        "report_desc": str(bytes([
+            0x05, 0x01, 
+            0x09, 0x06, 
+            0xa1, 0x01, 
+            0x05, 0x07, 
+            0x19, 0xe0, 
+            0x29, 0xe7, 
+            0x15, 0x00, 
+            0x25, 0x01, 
+            0x75, 0x01, 
+            0x95, 0x08, 
+            0x81, 0x02, 
+            0x95, 0x01, 
+            0x75, 0x08, 
+            0x81, 0x03, 
+            0x95, 0x05, 
+            0x75, 0x01, 
+            0x05, 0x08, 
+            0x19, 0x01, 
+            0x29, 0x05, 
+            0x91, 0x02, 
+            0x95, 0x01, 
+            0x75, 0x03, 
+            0x91, 0x03, 
+            0x95, 0x06, 
+            0x75, 0x08, 
+            0x15, 0x00, 
+            0x25, 0x65, 
+            0x05, 0x07, 
+            0x19, 0x00, 
+            0x29, 0x65, 
+            0x81, 0x00, 
+            0xc0
+        ]))
+    }
