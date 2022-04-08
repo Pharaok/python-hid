@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import os
 import platform
-from dataclasses import dataclass
-from typing import Generator, Mapping
+from collections import defaultdict
+from typing import Mapping, Optional
 
 # Ensure platform is linux
-if platform.system() != "Linux":
+if platform.system() != 'Linux':
     raise Exception(f"Unsupported platform: {platform.system()}. Expected linux.")
 
 # Ensure a USB device controller exists
@@ -14,8 +14,6 @@ try:
     udc = os.listdir("/sys/class/UDC")[0]
 except FileNotFoundError:
     raise Exception("Could not find USB device controller.")
-
-ConfigFS = Mapping[str, 'ConfigFS' | str] # type: ignore
 
 fs = {
     "idVendor": "0x1d6b",
@@ -43,32 +41,43 @@ fs = {
 }
 
 
-@dataclass
-class TextFile():
-    name: str
-    content: str = ""
-    path: str = ""
+class _FileTree:
+    def _factory(self) -> _FileTree:
+        return _FileTree(self)
 
+    def __init__(self, parent: Optional[_FileTree] = None, m: Optional[Mapping] = None) -> None:
+        self._dict = defaultdict(self._factory)
+        self._parent = parent
+        if m:
+            for k, v in m.items():
+                self[k] = v
 
-def iter_files(x: ConfigFS) -> Generator[TextFile, None, None]:
-    for k, v in x.items():
+    def __getitem__(self, k: str) -> _FileTree | str:
+        return self._dict[k]
+
+    def __setitem__(self, k: str, v: _FileTree | str) -> None:
         if isinstance(v, str):
-            yield TextFile(name=k, content=v)
+            self._dict[k] = v
+            self._bubble(k, v)
+        elif isinstance(v, Mapping):
+            self._dict[k] = _FileTree(self)
+            for kk, vv in v.items():
+                self._dict[k][kk] = vv
         else:
-            dir = iter_files(v)
-            for y in dir:
-                y.path = f"{k}/{y.path}"
-                yield y
+            raise TypeError
+
+    def _bubble(self, path: str, _v: str):
+        for k, v in self._parent._dict.items():
+            if v is self:
+                self._parent._bubble(f"{k}/{path}", _v)
 
 
-def init_configfs(gadget_name: str, fs: ConfigFS) -> None:
-    os.makedirs(gadget_name, exist_ok=True)
-    os.chdir(gadget_name)
-    print(os.curdir)
-    for f in iter_files(fs):
-        print(f)
-        f.path = f"/sys/kernel{f.path}"
-        os.makedirs(f.path, exist_ok=True)
-        with open(f"{f.path}{f.name}", "w") as file:
-            file.write(f.content)
-    os.chdir("..")
+class FileTree(_FileTree):
+    def __init__(self, path: str, *args, **kwargs) -> None:
+        self.path = path
+        super().__init__(None, *args, **kwargs)
+
+    def _bubble(self, path: str, _v: str):
+        os.makedirs(os.path.dirname(f"{self.path}/{path}"), exist_ok=True)
+        with open(f"{self.path}/{path}", "w") as f:
+            f.write(_v)
