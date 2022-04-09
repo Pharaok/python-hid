@@ -2,74 +2,73 @@ from __future__ import annotations
 
 import os
 import platform
+import shutil
 from collections import defaultdict
-from typing import Mapping, Optional
+from collections.abc import Iterator, Mapping, MutableMapping
+from typing import Optional, Union
 
-# Ensure platform is linux
-if platform.system() != 'Linux':
-    raise Exception(f"Unsupported platform: {platform.system()}. Expected linux.")
-
-# Ensure a USB device controller exists
-try:
-    udc = os.listdir("/sys/class/UDC")[0]
-except FileNotFoundError:
-    raise Exception("Could not find USB device controller.")
-
-fs = {
-    "idVendor": "0x1d6b",
-    "idProduct": "0x0104",
-    "bcdDevice": "0x0100",
-    "bcdUSB": "0x0200",
-    "UDC": "",
-    "strings": {
-        "0x409": {
-            "serialnumber": "1234567890",
-            "manufacturer": "Pharaok",
-            "product": "Pi02"
-        }
-    },
-    "configs": {
-        "c.1": {
-            "strings": {
-                "0x409": {
-                    "configuration": "Config 1"
-                }
-            },
-            "MaxPower": "250"
-        }
-    }
-}
+_KT = str
+_VT = Union[str, '_FileTree']
 
 
-class _FileTree:
+class _FileTree(MutableMapping[_KT, _VT]):
+
     def _factory(self) -> _FileTree:
         return _FileTree(self)
 
-    def __init__(self, parent: Optional[_FileTree] = None, m: Optional[Mapping] = None) -> None:
-        self._dict = defaultdict(self._factory)
+    def __init__(self, parent: Optional[_FileTree] = None, m: Optional[Mapping[_KT, _VT]] = None) -> None:
+        self._dict: defaultdict[_KT, _VT] = defaultdict(self._factory)
         self._parent = parent
         if m:
             for k, v in m.items():
                 self[k] = v
 
-    def __getitem__(self, k: str) -> _FileTree | str:
+    def __getitem__(self, k: _KT) -> _VT:
         return self._dict[k]
 
-    def __setitem__(self, k: str, v: _FileTree | str) -> None:
+    def __setitem__(self, k: _KT, v: _VT) -> None:
         if isinstance(v, str):
             self._dict[k] = v
-            self._bubble(k, v)
+            self._bubble_write(k, v)
         elif isinstance(v, Mapping):
-            self._dict[k] = _FileTree(self)
+            ft = _FileTree(self)
             for kk, vv in v.items():
-                self._dict[k][kk] = vv
+                ft[kk] = vv
+            self._dict = ft
         else:
             raise TypeError
 
-    def _bubble(self, path: str, _v: str):
+    def __delitem__(self, k: _KT) -> None:
+        self._dict.pop(k)
+
+    def __iter__(self) -> Iterator[_KT]:
+        return iter(self._dict)
+
+    def __len__(self) -> int:
+        return len(self._dict)
+
+    def clear(self) -> None:
+        super().clear()
+        self._bubble_delete("")
+
+    def setdefault(self, k: _KT, v: Optional[_VT] = None) -> _VT:
+        raise NotImplementedError
+
+    def _bubble_write(self, path: str, _v: str):
+        # Bubble a value with its path to the root dict
+        if self._parent is None:
+            raise Exception('Dangling branch.')
         for k, v in self._parent._dict.items():
             if v is self:
-                self._parent._bubble(f"{k}/{path}", _v)
+                self._parent._bubble_write(f"{k}/{path}", _v)
+
+    def _bubble_delete(self, path: str):
+        # Bubble a path to the root dict
+        if self._parent is None:
+            raise Exception('Dangling branch.')
+        for k, v in self._parent._dict.items():
+            if v is self:
+                self._parent._bubble_delete(f"{k}/{path}")
 
 
 class FileTree(_FileTree):
@@ -77,7 +76,18 @@ class FileTree(_FileTree):
         self.path = path
         super().__init__(None, *args, **kwargs)
 
-    def _bubble(self, path: str, _v: str):
+    def close(self) -> None:
+        print("del", self.path)
+        shutil.rmtree(self.path)
+
+    def _bubble_write(self, path: str, _v: str):
         os.makedirs(os.path.dirname(f"{self.path}/{path}"), exist_ok=True)
         with open(f"{self.path}/{path}", "w") as f:
             f.write(_v)
+
+    def _bubble_delete(self, path: str):
+        p = f"{self.path}/{path}"
+        if os.path.isdir(p):
+            shutil.rmtree(f"{self.path}/{path}")
+        elif os.path.isfile(p):
+            os.remove(p)
