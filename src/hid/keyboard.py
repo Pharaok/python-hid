@@ -4,6 +4,7 @@ import string
 from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any, Optional
+from . import configfs
 
 
 class Modifiers():
