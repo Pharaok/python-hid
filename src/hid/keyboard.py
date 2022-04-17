@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import string
 from collections import defaultdict
-from collections.abc import Sequence
-from typing import Any, Optional
-from . import configfs
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
+from typing import Iterator, Mapping, Optional
+
+from hid.gadget import Gadget
 
 
-class Modifiers():
+class Modifiers(Mapping[str, int]):
     NULL = 0x00
     LEFT_CONTROL = 0x01
     LEFT_SHIFT = 0x02
@@ -29,7 +31,7 @@ class Modifiers():
         return keys[key]
 
 
-class KeyCodes():
+class KeyCodes(Mapping[str, int]):
     _kb = {c: 0x04 + i for i, c in enumerate(string.ascii_lowercase)}
     _kb |= {c: 0x04 + i for i, c in enumerate(string.ascii_uppercase)}
     _kb |= {c: 0x1E + i for i, c in enumerate('1234567890')}
@@ -43,20 +45,20 @@ class KeyCodes():
 
     _np = {c: 0x54 + i for i, c in enumerate('\\*-+\n1234567890.')}
 
-    def __class_getitem__(cls, key: str):
+    def __class_getitem__(cls, key: str) -> int:
         return cls.keyboard(key)
 
     @classmethod
-    def keyboard(cls, key: str):
-        keys = {k: v for k, v in cls.__dict__.items()
-                if not k.startswith('_')}
+    def keyboard(cls, key: str) -> int:
+        keys: dict[str, int] = {k: v for k, v in cls.__dict__.items()
+                                if not k.startswith('_')}
         keys |= cls._kb
         return keys[key]
 
     @classmethod
-    def numpad(cls, key: str):
-        keys = {k: v for k, v in cls.__dict__.items()
-                if not k.startswith('_')}
+    def numpad(cls, key: str) -> int:
+        keys: dict[str, int] = {k: v for k, v in cls.__dict__.items()
+                                if not k.startswith('_')}
         keys |= cls._kb
         keys |= cls._np
         return keys[key]
@@ -115,77 +117,63 @@ class KeyCodes():
     APPLICATION = 0x65
 
 
+@dataclass
 class KeyboardReport():
     MAX_KEYS = 6
 
-    def __init__(self, mods: Optional[Sequence[int]] = None, keys: Optional[Sequence[int]] = None) -> None:
-        mods = mods or []
-        keys = keys or []
+    _mods: int = 0
+    _keys: list[int] = field(default_factory=list)
 
-        self._mods = 0
-        self.press_mod(*mods)
-        self._keys = [0] * self.MAX_KEYS
-        self._i = 0
-        self.press_key(*keys)
+    def __init__(self,
+                 mods: int = 0,
+                 keys: Optional[Sequence[int]] = None,
+                 update_callback: Callable[[], None] = lambda: None) -> None:
+        self._update = update_callback
+
+        self.mods = mods
+
+        if keys is None:
+            keys = []
+        self.keys = keys  # type: ignore
 
     @property
     def mods(self) -> int:
         return self._mods
 
+    @mods.setter
+    def mods(self, v: int):
+        if not 0 <= v < 256:
+            raise ValueError
+        self._mods = v
+        self._update()
+
     @property
     def keys(self) -> list[int]:
-        return self._keys
+        return self._keys + [KeyCodes.NULL] * (self.MAX_KEYS - len(self._keys))
 
-    def press_key(self, *keys: int):
-        for key in keys:
-            if key == KeyCodes.NULL:
-                continue
-            elif key in self._keys:
-                continue
-            self._keys[self._i] = key
-            self._i += 1
+    @keys.setter
+    def keys(self, v: Sequence[int]) -> None:
+        v = [x for x in v if x != KeyCodes.NULL]
+        if len(v) > self.MAX_KEYS:
+            raise IndexError
+        if any([not 0 <= x < 256 for x in v]):
+            raise ValueError
+        self._keys = v
+        self._update()
 
-    def release_key(self, *keys: int):
-        # Replace keys with NONE KeyCode
-        for key in keys:
-            if key == KeyCodes.NULL:
-                continue
-            try:
-                i = self._keys.index(key)
-            except ValueError:
-                i = None
-            if i is None:
-                continue
-            self._keys[i] = KeyCodes.NULL
-        # Move all NONE KeyCodes to the end
-        self._keys.sort(key=lambda x: x == KeyCodes.NULL)
-
-    def press_mod(self, *mods: int):
-        for mod in mods:
-            self._mods |= mod
-
-    def release_mod(self, *mods: int):
-        for mod in mods:
-            self._mods &= ~mod
-
-    def __eq__(self, x: Any) -> bool:
-        if not isinstance(x, KeyboardReport):
-            return NotImplemented
-        return (self._mods, self._keys) == (x._mods, self._keys)
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self._mods}, {self._keys})"
+    def __iter__(self) -> Iterator[int]:
+        return iter([self._mods, 0] + self.keys)
 
     def __str__(self) -> str:
-        return f"{self._mods:02X} 00 {' '.join([f'{key:02X}' for key in self._keys])}"
+        return ' '.join([f'{x:02X}' for x in self])
 
 
-class Keyboard(KeyboardReport):
+class Keyboard(Gadget):
     FUNCTION = {
         "protocol": "1",
         "subclass": "1",
         "report_length": "8",
-        "report_desc": str(bytes([
+        "report_desc": bytes([
             0x05, 0x01,
             0x09, 0x06,
             0xa1, 0x01,
@@ -218,5 +206,17 @@ class Keyboard(KeyboardReport):
             0x29, 0x65,
             0x81, 0x00,
             0xc0
-        ]))
+        ])
     }
+
+    def __init__(self) -> None:
+        super().__init__(functions=[self.FUNCTION])
+        self.report = KeyboardReport(update_callback=self._update)
+
+    def __enter__(self) -> Keyboard:
+        super().__enter__()
+        return self
+
+    def _update(self):
+        with open("/dev/hidg0", "wb") as f:
+            f.write(bytes(self.report))
