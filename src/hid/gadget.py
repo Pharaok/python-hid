@@ -8,7 +8,7 @@ from typing import Mapping, Optional, Union
 
 _KT = str
 _VT = Union[str, bytes, 'SymLink', 'Directory']
-_GT = Mapping[_KT, _VT | '_GT']  # type: ignore
+_GT = Mapping[_KT, Union[_VT, '_GT']]  # type: ignore
 
 
 @dataclass
