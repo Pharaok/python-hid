@@ -1,10 +1,11 @@
 from __future__ import annotations
+import re
 
 import string
-from collections.abc import Sequence
+from collections.abc import Sequence, MutableSequence
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
-from enum import Enum, IntEnum, IntFlag, auto
+from enum import IntFlag, auto
 
 
 from hid.gadget import Gadget
@@ -32,7 +33,9 @@ class Modifier(IntFlag):
 
 
 class KeyCode:
-    KEYBOARD = {c: 0x00 + i for i, c in enumerate(['NULL', 'ERROR_POLL_OVER', 'POST_FAIL', 'ERROR_UNDEFINED'])}
+    NULL = 0x00
+
+    KEYBOARD = {c: 0x01 + i for i, c in enumerate(['ERROR_ROLL_OVER', 'POST_FAIL', 'ERROR_UNDEFINED'])}
     KEYBOARD |= {c: 0x04 + i for i, c in enumerate(string.ascii_lowercase)}
     KEYBOARD |= {c: 0x04 + i for i, c in enumerate(string.ascii_uppercase)}
     KEYBOARD |= {c: 0x1E + i for i, c in enumerate('1234567890')}
@@ -58,12 +61,58 @@ class KeyCode:
     }
 
 
+class KeyList(MutableSequence[int]):
+    RESERVED = {*range(0, 4)}
+
+    def __init__(self, keys: Optional[Sequence[int]] = None, max_len: int = 6) -> None:
+        self.max_len = max_len
+        self._list = []
+
+        if keys is None:
+            keys = []
+        for i, key in enumerate(keys):
+            self.__setitem__(i, key)
+
+    def __getitem__(self, i: int) -> int:
+        if len(self._list) > self.max_len:
+            return KeyCode.KEYBOARD['ERROR_ROLL_OVER']
+        if self.max_len > i >= len(self._list):
+            return KeyCode.NULL
+        return self._list.__getitem__(i)
+
+    def __setitem__(self, i: int, v: int) -> None:
+        if not 0 < v < 256:
+            raise ValueError
+        if v in self.RESERVED or v in self._list:
+            return
+
+        self._list.__setitem__(i, v)
+
+    def __delitem__(self, i: int) -> None:
+        self._list.__delitem__(i)
+
+    def __len__(self) -> int:
+        return self.max_len
+
+    def insert(self, i: int, v: int) -> int:
+        if not 0 <= v < 256:
+            raise ValueError
+        if v in self.RESERVED or v in self._list:
+            return
+
+        self._list.insert(i, v)
+
+    def __contains__(self, v: int) -> bool:
+        return self._list.__contains__(v)
+
+    def index(self, v: int) -> int:
+        return self._list.index(v)
+
+
 @dataclass
 class KeyboardReport:
-    MAX_KEYS = 6
-
     _mods: int = 0
-    _keys: list[int] = field(default_factory=list)
+    _keys: KeyList = field(default_factory=KeyList)
 
     @property
     def mods(self) -> int:
@@ -77,25 +126,20 @@ class KeyboardReport:
 
     @property
     def keys(self) -> list[int]:
-        return self._keys + [KeyCode.KEYBOARD['NULL']] * (self.MAX_KEYS - len(self._keys))
+        return self._keys
 
     @keys.setter
     def keys(self, v: Sequence[int]) -> None:
-        v = [x for x in v if x != KeyCode.KEYBOARD['NULL']]
-        if len(v) > self.MAX_KEYS:
-            raise IndexError
-        if any([not 0 <= x < 256 for x in v]):
-            raise ValueError
-        self._keys = v
+        self._keys = KeyList(v)
 
     def __iter__(self) -> Iterator[int]:
-        return iter([self._mods, 0] + self.keys)
+        return iter([self._mods, 0] + list(self._keys))
 
     def __str__(self) -> str:
         return ' '.join([f'{x:02X}' for x in self])
 
 
-class Keyboard(Gadget):
+class Keyboard:
     FUNCTION = {
         "protocol": "1",
         "subclass": "1",
@@ -135,12 +179,20 @@ class Keyboard(Gadget):
             0xc0])
     }
 
-    def __init__(self) -> None:
-        super().__init__(functions=[self.FUNCTION])
+    def __init__(self, gadget: Optional[Gadget] = None) -> None:
+        if gadget is None:
+            gadget = Gadget()
+        self.gadget = gadget
+        self.function = gadget.add_function(self.FUNCTION)
         self.report = KeyboardReport()
 
-    def send_report(self):
-        with open("/dev/hidg0", "wb") as f:
+    def send_report(self) -> None:
+        if not self.gadget.enabled:
+            raise Exception
+        d = self.function['dev']
+        d = d.strip()
+        d = d[d.find(':') + 1:]
+        with open(f"/dev/hidg{d}", "wb") as f:
             f.write(bytes(self.report))
 
     def write(self, text: str) -> None:

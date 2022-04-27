@@ -2,6 +2,7 @@ pyproject.toml
 setup.cfg
 setup.py
 src/hid/__init__.py
+src/hid/gadget.py
 src/hid/keyboard.py
 src/hid/py.typed
 src/hid.egg-info/PKG-INFO
