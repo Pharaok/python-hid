@@ -1,8 +1,57 @@
+from __future__ import annotations
+from abc import ABC, abstractmethod
+
 from ctypes import Structure
-from enum import IntEnum, auto
+from enum import IntEnum, IntFlag, auto
+from math import ceil
 
 
-USAGE_PAGE = 0x06
+class DataFlag(IntFlag):
+    DATA = 0x00
+    ARRAY = 0x00
+    ABSOLUTE = 0x00
+    NO_WRAP = 0x00
+    LINEAR = 0x00
+    PREFERRED_STATE = 0x00
+    NO_NULL_POSITION = 0x00
+    NON_VOLATILE = 0x00
+    BIT_FIELD = 0x00
+    CONSTANT = auto()
+    VARIABLE = auto()
+    RELATIVE = auto()
+    WRAP = auto()
+    NON_LINEAR = auto()
+    NO_PREFERRED = auto()
+    NULL_STATE = auto()
+    VOLATILE = auto()
+    BUFFER = auto()
+
+
+class IOFBase(ABC, bytes):
+    @property
+    @abstractmethod
+    def PREFIX(self) -> int: ...
+
+    def __new__(cls, /, *flags: DataFlag):
+        n = 0
+        for f in flags:
+            n |= f
+        l = max(1, ceil(n.bit_length() / 8))
+        return super().__new__(cls, bytes([cls.PREFIX | l]) + n.to_bytes(l, 'little'))
+
+
+class Input(IOFBase):
+    PREFIX = 0b10000000
+
+
+class Output(IOFBase):
+    PREFIX = 0b10010000
+
+
+class Feature(IOFBase):
+    PREFIX = 0b10110000
+
+
 class UsagePage(IntEnum):
     GENERIC_DESKTOP = auto()
     SIMULATION_CONTROLS = auto()
