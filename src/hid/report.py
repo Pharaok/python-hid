@@ -28,7 +28,7 @@ class DataFlags(IntFlag):
     BUFFER = auto()
 
 
-class MainItemBase(ABC, bytes):
+class ItemBase(ABC, bytes):
     @property
     @abstractmethod
     def PREFIX(self) -> int: ...
@@ -49,11 +49,11 @@ class MainItemBase(ABC, bytes):
     def __init_subclass__(cls) -> None:
         if isinstance(cls.PREFIX, property):
             return
-        if cls.PREFIX & 0b11 != 0:
+        if cls.PREFIX.bit_length() > 8 or cls.PREFIX & 0b11 != 0:
             raise ValueError("Last 2 bits in the prefix are reserved for size.")
 
 
-class FlagItemBase(MainItemBase):
+class FlagItemBase(ItemBase):
     def __new__(cls, /, *flags: int):
         n = 0
         for f in flags:
@@ -110,3 +110,47 @@ class UsagePages(IntEnum):
     CAMERA_CONTROL = 0x90
     ARCADE = auto()
     GAMING_DEVICE = auto()
+
+
+class UsagePage(ItemBase):
+    PREFIX = 0b00000100
+
+
+class LogicalMinimum(ItemBase):
+    PREFIX = 0b00010100
+
+
+class LogicalMaximum(ItemBase):
+    PREFIX = 0b00100100
+
+
+class PhysicalMinimum(ItemBase):
+    PREFIX = 0b00110100
+
+
+class PhysicalMaximum(ItemBase):
+    PREFIX = 0b01000100
+
+
+class UnitExponent(ItemBase):
+    PREFIX = 0b01010100
+
+
+class Unit(ItemBase):
+    PREFIX = 0b01110100
+
+
+class ReportID(ItemBase):
+    PREFIX = 0b10000100
+
+
+class ReportCount(ItemBase):
+    PREFIX = 0b10010100
+
+
+class Push(ItemBase):
+    PREFIX = 0b10100100
+
+
+class Pop(ItemBase):
+    PREFIX = 0b10110100
