@@ -4,7 +4,12 @@ from abc import ABC, abstractmethod
 from ctypes import Structure
 from enum import IntEnum, IntFlag, auto
 from math import ceil
-from typing import Optional, SupportsBytes
+from typing import Optional, SupportsBytes, Literal, SupportsInt
+
+
+def int_to_min_bytes(n: int, byteorder: Literal['little', 'big'] = 'little') -> bytes:
+    l = max(1, ceil(n.bit_length() / 8))
+    return n.to_bytes(l, byteorder)
 
 
 class DataFlags(IntFlag):
@@ -33,8 +38,11 @@ class ItemBase(ABC, bytes):
     @abstractmethod
     def PREFIX(self) -> int: ...
 
-    def __new__(cls, data: SupportsBytes, content: Optional[SupportsBytes] = None):
-        l = len(data)
+    def __new__(cls, data: SupportsBytes | int, content: Optional[SupportsBytes] = None):
+        if isinstance(data, int):
+            data = int_to_min_bytes(data)
+
+        l = len(bytes(data))
         if l.bit_length() > 2:
             raise OverflowError("Data is too large.")
 
@@ -58,9 +66,11 @@ class FlagItemBase(ItemBase):
         n = 0
         for f in flags:
             n = f
-        l = max(1, ceil(n.bit_length() / 8))
-        b = n.to_bytes(l, 'little')
+        b = int_to_min_bytes(n)
         return super().__new__(cls, b)
+
+
+# Main items
 
 
 class Input(FlagItemBase):
@@ -73,6 +83,9 @@ class Output(FlagItemBase):
 
 class Feature(FlagItemBase):
     PREFIX = 0b10110000
+
+
+# Global items
 
 
 class UsagePages(IntEnum):
@@ -154,3 +167,46 @@ class Push(ItemBase):
 
 class Pop(ItemBase):
     PREFIX = 0b10110100
+
+
+# Local items
+
+
+class Usage(ItemBase):
+    PREFIX = 0b00001000
+
+
+class UsageMinimum(ItemBase):
+    PREFIX = 0b00011000
+
+
+class UsageMaximum(ItemBase):
+    PREFIX = 0b00101000
+
+
+class DesignatorIndex(ItemBase):
+    PREFIX = 0b00111000
+
+
+class DesignatorMinimum(ItemBase):
+    PREFIX = 0b01001000
+
+
+class DesignatorMaximum(ItemBase):
+    PREFIX = 0b01011000
+
+
+class StringIndex(ItemBase):
+    PREFIX = 0b01111000
+
+
+class StringMinimum(ItemBase):
+    PREFIX = 0b10001000
+
+
+class StringMaximum(ItemBase):
+    PREFIX = 0b10011000
+
+
+class Delimitre(ItemBase):
+    PREFIX = 0b10101000
