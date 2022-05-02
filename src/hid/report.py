@@ -1,12 +1,13 @@
 from __future__ import annotations
-from abc import ABC, abstractmethod
 
+from abc import ABC, abstractmethod
 from ctypes import Structure
 from enum import IntEnum, IntFlag, auto
 from math import ceil
+from typing import Optional, SupportsBytes
 
 
-class DataFlag(IntFlag):
+class DataFlags(IntFlag):
     DATA = 0x00
     ARRAY = 0x00
     ABSOLUTE = 0x00
@@ -27,32 +28,54 @@ class DataFlag(IntFlag):
     BUFFER = auto()
 
 
-class IOFBase(ABC, bytes):
+class MainItemBase(ABC, bytes):
     @property
     @abstractmethod
     def PREFIX(self) -> int: ...
 
-    def __new__(cls, /, *flags: DataFlag):
+    def __new__(cls, data: SupportsBytes, content: Optional[SupportsBytes] = None):
+        l = len(data)
+        if l.bit_length() > 2:
+            raise OverflowError("Data is too large.")
+
+        b = bytes([cls.PREFIX | l]) + bytes(data)
+        if content is not None:
+            b += bytes(content)
+        if hasattr(cls, 'POSTFIX'):
+            b += bytes([cls.POSTFIX])
+
+        return super().__new__(cls, b)
+
+    def __init_subclass__(cls) -> None:
+        if isinstance(cls.PREFIX, property):
+            return
+        if cls.PREFIX & 0b11 != 0:
+            raise ValueError("Last 2 bits in the prefix are reserved for size.")
+
+
+class FlagItemBase(MainItemBase):
+    def __new__(cls, /, *flags: int):
         n = 0
         for f in flags:
-            n |= f
+            n = f
         l = max(1, ceil(n.bit_length() / 8))
-        return super().__new__(cls, bytes([cls.PREFIX | l]) + n.to_bytes(l, 'little'))
+        b = n.to_bytes(l, 'little')
+        return super().__new__(cls, b)
 
 
-class Input(IOFBase):
+class Input(FlagItemBase):
     PREFIX = 0b10000000
 
 
-class Output(IOFBase):
+class Output(FlagItemBase):
     PREFIX = 0b10010000
 
 
-class Feature(IOFBase):
+class Feature(FlagItemBase):
     PREFIX = 0b10110000
 
 
-class UsagePage(IntEnum):
+class UsagePages(IntEnum):
     GENERIC_DESKTOP = auto()
     SIMULATION_CONTROLS = auto()
     VR_CONTROLS = auto()
