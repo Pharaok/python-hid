@@ -1,10 +1,23 @@
 from __future__ import annotations
 from collections.abc import Iterable
 from enum import IntEnum, IntFlag, auto
-from typing import Any, Optional
+from typing import Optional
 
-from . import BaseFlagItem, BaseItem
-from hid.helpers import flatten, ConvertibleToBytes
+from hid.helpers import flatten, ConvertibleToBytes, int_to_min_bytes, convert_to_bytes
+
+
+def item_from_bytes(b: bytes) -> BaseItem:
+    prefix = int(b[0])
+    for k, v in globals().items():
+        if k.startswith('_'):
+            continue
+        if isinstance(v, type):
+            if issubclass(v, BaseItem):
+                if v.PREFIX is NotImplemented:
+                    continue
+                if prefix & 0b11111100 == v.PREFIX:
+                    print(v)
+                    return v(b[1:])
 
 
 class DataFlag(IntFlag):
@@ -38,6 +51,44 @@ class CollectionType(IntEnum):
     USAGE_MODIFIER = auto()
 
 
+class BaseItem(bytes):
+    PREFIX: int = NotImplemented
+    _SIZE_MASK = 0b00000011
+
+    def __new__(cls, prefix_data: Optional[ConvertibleToBytes] = None) -> BaseItem:
+        if cls.PREFIX is NotImplemented:
+            raise NotImplementedError
+        b = bytearray([cls.PREFIX])
+        if prefix_data is not None:
+            data = convert_to_bytes(prefix_data)
+            data_len = len(data)
+            if data_len.bit_length() > cls._SIZE_MASK.bit_length():
+                raise OverflowError('Data is too large.')
+            b[0] |= data_len
+            b += data
+        return super().__new__(cls, b)
+
+    def __init_subclass__(cls) -> None:
+        if cls.PREFIX is NotImplemented:
+            return
+        if cls.PREFIX.bit_length() > 8:
+            raise ValueError('Prefix must fit in 1 byte.')
+        if cls.PREFIX & cls._SIZE_MASK != 0:
+            raise ValueError("Prefix can't overlap with size mask.")
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__qualname__}({self[1:].__repr__()})'
+
+
+class BaseFlagItem(BaseItem):
+    def __new__(cls, *flags: int) -> BaseFlagItem:
+        n = 0
+        for f in flags:
+            n |= f
+        b = int_to_min_bytes(n)
+        return super().__new__(cls, b)
+
+
 class BaseMainItem(BaseItem):
     pass
 
@@ -57,13 +108,22 @@ class Feature(BaseFlagItem, BaseMainItem):
 class Collection(BaseMainItem):
     PREFIX = 0b10100000
 
-    def __new__(cls, prefix_data: Optional[ConvertibleToBytes], content: Optional[Iterable[Any]] = None) -> Collection:
-        obj = super().__new__(cls, prefix_data)
-        b = bytes(obj)
+    def __new__(cls,
+                prefix_data: Optional[ConvertibleToBytes],
+                content: Optional[Iterable[BaseItem]] = None) -> Collection:
+        prefix = super().__new__(cls, prefix_data)
+        b = bytes(prefix)
         if content:
             b += bytes(flatten(content))
-            b += CollectionEnd()
+            b += bytes(CollectionEnd())
         return bytes.__new__(cls, b)
+
+    def __init__(self,
+                 prefix_data: Optional[ConvertibleToBytes],
+                 content: Optional[Iterable[BaseItem]] = None) -> None:
+        if content:
+            prefix = self.__class__(prefix_data)
+            self.items = (prefix, *flatten(content, ignore=(BaseItem,)), CollectionEnd())
 
 
 class CollectionEnd(BaseMainItem):

@@ -1,7 +1,7 @@
 from enum import IntEnum, auto
 
 
-class Usage(IntEnum):
+class UsagePages(IntEnum):
     GENERIC_DESKTOP = auto()
     SIMULATION_CONTROLS = auto()
     VR_CONTROLS = auto()

@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from math import ceil
-from typing import SupportsIndex, Literal, Any, Union
+from typing import SupportsIndex, Literal, Any, Union, Type
 
 ConvertibleToBytes = Union[SupportsIndex, Iterable[SupportsIndex]]
 
@@ -11,11 +11,13 @@ def int_to_min_bytes(n: SupportsIndex, byteorder: Literal['little', 'big'] = 'li
     return n.to_bytes(min_len, byteorder)
 
 
-def flatten(it: Iterable[Any]) -> list[Any]:
+def flatten(it: Iterable[Any], ignore: tuple[Type] = ()) -> list[Any]:
     flattened = []
     for x in it:
-        if isinstance(x, Iterable):
-            flattened.extend(flatten(x))
+        if isinstance(x, ignore):
+            flattened.append(x)
+        elif isinstance(x, Iterable):
+            flattened.extend(flatten(x, ignore=ignore))
         else:
             flattened.append(x)
     return flattened
