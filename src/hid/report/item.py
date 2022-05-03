@@ -1,10 +1,13 @@
-from collections.abc import Sequence
+from __future__ import annotations
+from collections.abc import Iterable
 from enum import IntEnum, IntFlag, auto
+from typing import Any, Optional
 
 from . import BaseFlagItem, BaseItem
+from hid.helpers import flatten, ConvertibleToBytes
 
 
-class DataFlags(IntFlag):
+class DataFlag(IntFlag):
     DATA = 0x00
     ARRAY = 0x00
     ABSOLUTE = 0x00
@@ -25,7 +28,7 @@ class DataFlags(IntFlag):
     BUFFER = auto()
 
 
-class CollectionTypes(IntEnum):
+class CollectionType(IntEnum):
     PHYSICAL = 0x00
     APPLICATION = auto()
     LOGICAL = auto()
@@ -54,16 +57,20 @@ class Feature(BaseFlagItem, BaseMainItem):
 class Collection(BaseMainItem):
     PREFIX = 0b10100000
 
-    def __new__(cls, data, content):
-        obj = super().__new__(cls, data)
-        new_content = bytearray()
-        for x in content:
-            if isinstance(x, Sequence):
-                new_content.extend(x)
-            else:
-                new_content.append(x)
-        obj += bytes(new_content) + bytes([0b11000000])
-        return obj
+    def __new__(cls, prefix_data: Optional[ConvertibleToBytes], content: Optional[Iterable[Any]] = None) -> Collection:
+        obj = super().__new__(cls, prefix_data)
+        b = bytes(obj)
+        if content:
+            b += bytes(flatten(content))
+            b += CollectionEnd()
+        return bytes.__new__(cls, b)
+
+
+class CollectionEnd(BaseMainItem):
+    PREFIX = 0b11000000
+
+    def __new__(cls) -> CollectionEnd:
+        return super().__new__(cls)
 
 
 class BaseGlobalItem(BaseItem):
