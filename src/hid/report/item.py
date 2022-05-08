@@ -1,44 +1,9 @@
 from __future__ import annotations
-from collections.abc import Iterable
+
 from enum import IntEnum, IntFlag, auto
-from typing import Optional
+from typing import Optional, SupportsIndex, TypeVar, Type
 
-from hid.helpers import flatten, ConvertibleToBytes, int_to_min_bytes, convert_to_bytes
-
-
-def item_from_bytes(b: bytes) -> BaseItem:
-    prefix = int(b[0])
-    for k, v in globals().items():
-        if k.startswith('_'):
-            continue
-        if isinstance(v, type):
-            if issubclass(v, BaseItem):
-                if v.PREFIX is NotImplemented:
-                    continue
-                if prefix & 0b11111100 == v.PREFIX:
-                    print(v)
-                    return v(b[1:])
-
-
-class DataFlag(IntFlag):
-    DATA = 0x00
-    ARRAY = 0x00
-    ABSOLUTE = 0x00
-    NO_WRAP = 0x00
-    LINEAR = 0x00
-    PREFERRED_STATE = 0x00
-    NO_NULL_POSITION = 0x00
-    NON_VOLATILE = 0x00
-    BIT_FIELD = 0x00
-    CONSTANT = auto()
-    VARIABLE = auto()
-    RELATIVE = auto()
-    WRAP = auto()
-    NON_LINEAR = auto()
-    NO_PREFERRED = auto()
-    NULL_STATE = auto()
-    VOLATILE = auto()
-    BUFFER = auto()
+from hid.helpers import ConvertibleToBytes, convert_to_bytes, deep_subclasses
 
 
 class CollectionType(IntEnum):
@@ -51,42 +16,86 @@ class CollectionType(IntEnum):
     USAGE_MODIFIER = auto()
 
 
+class DataFlag(IntFlag):
+    CONSTANT = auto()
+    VARIABLE = auto()
+    RELATIVE = auto()
+    WRAP = auto()
+    NON_LINEAR = auto()
+    NO_PREFERRED = auto()
+    NULL_STATE = auto()
+    VOLATILE = auto()
+    BUFFER = auto()
+
+
+_BT = TypeVar('_BT', bound='BaseItem')
 class BaseItem(bytes):
     PREFIX: int = NotImplemented
+    _PREFIX_MASK = 0b11111100
     _SIZE_MASK = 0b00000011
+    _SIZES = (0, 1, 2, 4)
 
-    def __new__(cls, prefix_data: Optional[ConvertibleToBytes] = None) -> BaseItem:
+    def __new__(cls: Type[_BT], prefix_data: Optional[ConvertibleToBytes] = None) -> _BT:
         if cls.PREFIX is NotImplemented:
             raise NotImplementedError
+
         b = bytearray([cls.PREFIX])
         if prefix_data is not None:
             data = convert_to_bytes(prefix_data)
             data_len = len(data)
-            if data_len.bit_length() > cls._SIZE_MASK.bit_length():
-                raise OverflowError('Data is too large.')
-            b[0] |= data_len
+            if data_len.bit_length() > max(cls._SIZES):
+                raise OverflowError(f'Data is too large. Maximum size: {max(cls._SIZES)}')
+
+            index = min([x for x in enumerate(cls._SIZES) if x[1] >= data_len], key=lambda x: x[1])[0]
+            b[0] |= index
             b += data
+
         return super().__new__(cls, b)
 
     def __init_subclass__(cls) -> None:
         if cls.PREFIX is NotImplemented:
             return
+        for sc in deep_subclasses(BaseItem):
+            if sc is cls:
+                continue
+            if sc.PREFIX == cls.PREFIX:
+                raise ValueError(f"Prefix can't be the same as another subclass of BaseItem: {sc.__name__}")
         if cls.PREFIX.bit_length() > 8:
             raise ValueError('Prefix must fit in 1 byte.')
-        if cls.PREFIX & cls._SIZE_MASK != 0:
+        inverted_prefix_mask = ((1 << 8) - 1) ^ cls._PREFIX_MASK
+        if cls.PREFIX & inverted_prefix_mask != 0:
             raise ValueError("Prefix can't overlap with size mask.")
 
+    @classmethod
+    def from_bytes(cls, b: bytes) -> BaseItem:
+        size = b[0] & cls._SIZE_MASK
+        for c in filter(lambda d: d.PREFIX is not NotImplemented, deep_subclasses(cls)):
+            inverted_size_mask = ((1 << 8) - 1) ^ cls._SIZE_MASK
+            if b[0] & inverted_size_mask == c.PREFIX:
+                return c(b[1:1 + size])
+        raise ValueError
+
     def __repr__(self) -> str:
-        return f'{self.__class__.__qualname__}({self[1:].__repr__()})'
+        return f'{self.__class__.__qualname__}({self.data!r})'
+
+    @property
+    def size(self) -> int:
+        return self._SIZES[self[0] & self._SIZE_MASK]
+
+    @property
+    def data(self) -> bytes:
+        return bytes(self[1:1 + self.size])
 
 
+_FT = TypeVar('_FT', bound='BaseFlagItem')
 class BaseFlagItem(BaseItem):
-    def __new__(cls, *flags: int) -> BaseFlagItem:
+    def __new__(cls: Type[_FT], *flags: SupportsIndex) -> _FT:
+        if not all([isinstance(x, SupportsIndex) for x in flags]):
+            return super().__new__(cls, *flags)
         n = 0
         for f in flags:
-            n |= f
-        b = int_to_min_bytes(n)
-        return super().__new__(cls, b)
+            n |= int(f)
+        return super().__new__(cls, n)
 
 
 class BaseMainItem(BaseItem):
@@ -108,28 +117,13 @@ class Feature(BaseFlagItem, BaseMainItem):
 class Collection(BaseMainItem):
     PREFIX = 0b10100000
 
-    def __new__(cls,
-                prefix_data: Optional[ConvertibleToBytes],
-                content: Optional[Iterable[BaseItem]] = None) -> Collection:
-        prefix = super().__new__(cls, prefix_data)
-        b = bytes(prefix)
-        if content:
-            b += bytes(flatten(content))
-            b += bytes(CollectionEnd())
-        return bytes.__new__(cls, b)
 
-    def __init__(self,
-                 prefix_data: Optional[ConvertibleToBytes],
-                 content: Optional[Iterable[BaseItem]] = None) -> None:
-        if content:
-            prefix = self.__class__(prefix_data)
-            self.items = (prefix, *flatten(content, ignore=(BaseItem,)), CollectionEnd())
-
-
-class CollectionEnd(BaseMainItem):
+class EndCollection(BaseMainItem):
     PREFIX = 0b11000000
 
-    def __new__(cls) -> CollectionEnd:
+    def __new__(cls, prefix_data: Optional[ConvertibleToBytes] = None) -> EndCollection:
+        if prefix_data:
+            raise ValueError
         return super().__new__(cls)
 
 
@@ -162,7 +156,7 @@ class UnitExponent(BaseGlobalItem):
 
 
 class Unit(BaseGlobalItem):
-    PREFIX = 0b01110100
+    PREFIX = 0b01100100
 
 
 class ReportSize(BaseGlobalItem):
