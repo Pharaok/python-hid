@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import IntEnum, IntFlag, auto
-from typing import Optional, SupportsIndex, TypeVar, Type
+from typing import Optional, SupportsIndex, TypeVar, Type, Any
 
 from hid.helpers import ConvertibleToBytes, convert_to_bytes, deep_subclasses
 
@@ -29,6 +29,8 @@ class DataFlag(IntFlag):
 
 
 _BT = TypeVar('_BT', bound='BaseItem')
+
+
 class BaseItem(bytes):
     PREFIX: int = NotImplemented
     _PREFIX_MASK = 0b11111100
@@ -52,7 +54,8 @@ class BaseItem(bytes):
 
         return super().__new__(cls, b)
 
-    def __init_subclass__(cls) -> None:
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
         if cls.PREFIX is NotImplemented:
             return
         for sc in deep_subclasses(BaseItem):
@@ -88,6 +91,8 @@ class BaseItem(bytes):
 
 
 _FT = TypeVar('_FT', bound='BaseFlagItem')
+
+
 class BaseFlagItem(BaseItem):
     def __new__(cls: Type[_FT], *flags: SupportsIndex) -> _FT:
         if not all([isinstance(x, SupportsIndex) for x in flags]):

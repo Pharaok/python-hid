@@ -1,9 +1,9 @@
 """https://www.usb.org/sites/default/files/hid1_11.pdf"""
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from math import ceil
-from typing import Union, overload
+from typing import Union, Generator, SupportsBytes
 
 from hid.helpers import flatten
 from .item import *
@@ -11,22 +11,18 @@ from .item import *
 _DT = Iterable[Union[BaseItem, '_DT']]  # type: ignore
 
 
-class ReportDescriptor(Sequence[BaseItem]):
-    def __init__(self, descriptor: Union[bytes, _DT]) -> None:
-        if isinstance(descriptor, bytes):
-            self._items = []
-            i = 0
-            while i < len(descriptor):
-                x = BaseItem.from_bytes(descriptor[i:])
-                self._items.append(x)
-                i += len(x)
-        else:
-            self._items = flatten(descriptor, ignore=(BaseItem,))
+class ReportDescriptor(bytes):
+    def __new__(cls, descriptor: Union[bytes, _DT]) -> ReportDescriptor:
+        b = flatten(descriptor)
+        return super().__new__(cls, b)
 
+    def __init__(self, descriptor: Union[bytes, _DT]) -> None:
         global_items: dict[int, int] = {}
         local_items: dict[int, int] = {}
         input_items = []
-        for x in self._items:
+        output_items = []
+
+        for x in self.items():
             if not isinstance(x, BaseItem):
                 raise TypeError
 
@@ -36,6 +32,8 @@ class ReportDescriptor(Sequence[BaseItem]):
             if isinstance(x, BaseMainItem):
                 if isinstance(x, Input):
                     input_items.append(global_items | local_items)
+                elif isinstance(x, Output):
+                    output_items.append(global_items | local_items)
                 local_items.clear()
             elif isinstance(x, BaseGlobalItem):
                 global_items[x.PREFIX] = data
@@ -45,27 +43,24 @@ class ReportDescriptor(Sequence[BaseItem]):
         input_bit_len = 0
         for y in input_items:
             input_bit_len += y[ReportSize.PREFIX] * y[ReportCount.PREFIX]
-        self.input_size = ceil(input_bit_len / 8)
+        self.input_len = ceil(input_bit_len / 8)
+        output_bit_len = 0
+        for y in output_items:
+            output_bit_len += y[ReportSize.PREFIX] * y[ReportCount.PREFIX]
+        self.output_len = ceil(output_bit_len / 8)
 
-    @overload
-    def __getitem__(self, i: int) -> BaseItem:
-        ...
+    def items(self) -> Generator[BaseItem, None, None]:
+        i = 0
+        while i < len(self):
+            x = BaseItem.from_bytes(self[i:])
+            yield x
+            i += len(x)
 
-    @overload
-    def __getitem__(self, s: slice) -> Sequence[BaseItem]:
-        ...
-
-    def __getitem__(self, x):  # type: ignore
-        return self._items[x]
-
-    def __len__(self) -> int:
-        return len(self._items)
-
-    def __bytes__(self) -> bytes:
-        return bytes(flatten(self._items))
-
-    def __repr__(self) -> str:
-        return f'{self.__class__.__name__}({self._items!r})'
+    def validate_input_report(self, report: SupportsBytes | Iterable[SupportsIndex]) -> bool:
+        report = bytes(report)
+        if not len(report) == self.input_len:
+            return False
+        return True
 
 
 class ProtocolCode(IntEnum):
