@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from enum import IntEnum, IntFlag, auto
-from typing import Optional, SupportsIndex, TypeVar, Type, Any
+from math import ceil
+from typing import Optional, TypeVar, Type, Any, SupportsIndex, SupportsBytes, Iterable
 
-from hid.helpers import ConvertibleToBytes, convert_to_bytes, deep_subclasses
+from hid.helpers import ConvertibleToBytes, deep_subclasses
 
 
 class CollectionType(IntEnum):
@@ -43,14 +44,24 @@ class BaseItem(bytes):
 
         b = bytearray([cls.PREFIX])
         if prefix_data is not None:
-            data = convert_to_bytes(prefix_data)
-            data_len = len(data)
-            if data_len.bit_length() > max(cls._SIZES):
-                raise OverflowError(f'Data is too large. Maximum size: {max(cls._SIZES)}')
+            if isinstance(prefix_data, (Iterable, SupportsBytes)):
+                b = bytes(prefix_data)
+                if len(b) not in cls._SIZES:
+                    raise ValueError
+            elif isinstance(prefix_data, SupportsIndex):
+                n = int(prefix_data)
+                #                         sign bit
+                #                             v
+                size = ceil((n.bit_length() + 1) / 8)
+                min_size = min([x for x in cls._SIZES if x >= size])
 
-            index = min([x for x in enumerate(cls._SIZES) if x[1] >= data_len], key=lambda x: x[1])[0]
-            b[0] |= index
-            b += data
+                b = n.to_bytes(min_size, 'little', signed=True)
+            else:
+                raise TypeError
+
+            x = bytearray([cls.PREFIX])
+            x[0] |= cls._SIZES.index(len(b))
+            x += b
 
         return super().__new__(cls, b)
 
@@ -90,32 +101,19 @@ class BaseItem(bytes):
         return bytes(self[1:1 + self.size])
 
 
-_FT = TypeVar('_FT', bound='BaseFlagItem')
-
-
-class BaseFlagItem(BaseItem):
-    def __new__(cls: Type[_FT], *flags: SupportsIndex) -> _FT:
-        if not all([isinstance(x, SupportsIndex) for x in flags]):
-            return super().__new__(cls, *flags)
-        n = 0
-        for f in flags:
-            n |= int(f)
-        return super().__new__(cls, n)
-
-
 class BaseMainItem(BaseItem):
     pass
 
 
-class Input(BaseFlagItem, BaseMainItem):
+class Input(BaseMainItem):
     PREFIX = 0b10000000
 
 
-class Output(BaseFlagItem, BaseMainItem):
+class Output(BaseMainItem):
     PREFIX = 0b10010000
 
 
-class Feature(BaseFlagItem, BaseMainItem):
+class Feature(BaseMainItem):
     PREFIX = 0b10110000
 
 
