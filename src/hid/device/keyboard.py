@@ -113,3 +113,15 @@ class Keyboard(HIDDevice):
         for c in text:
             self.send_report(KeyboardReport(mods=Modifier.from_char(c), keys=(c_ubyte * 6)(KeyCode.KEYBOARD[c])))
             self.send_report(KeyboardReport())
+
+    @property
+    def num_lock(self) -> bool:
+        return bool(self.output[0] & 1 << (LED.NUM_LOCK - 1))
+
+    @property
+    def caps_lock(self) -> bool:
+        return bool(self.output[0] & 1 << (LED.CAPS_LOCK - 1))
+
+    @property
+    def scroll_lock(self) -> bool:
+        return bool(self.output[0] & 1 << (LED.SCROLL_LOCK - 1))

@@ -70,3 +70,8 @@ class GenericDesktop(IntEnum):
     COUNTED_BUFFER = auto()
     BYTE_COUNT = auto()
     MOTION_WAKEUP = auto()
+
+class LED(IntEnum):
+    NUM_LOCK = auto()
+    CAPS_LOCK = auto()
+    SCROLL_LOCK = auto()
