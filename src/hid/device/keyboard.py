@@ -5,7 +5,7 @@ from ctypes import Structure, c_ubyte
 
 from hid.report import ProtocolCode, SubclassCode, ReportDescriptor
 from hid.report.item import *
-from hid.report.usage import UsagePages
+from hid.report.usage import UsagePages, LED
 from . import HIDDevice
 
 
@@ -82,7 +82,7 @@ class Keyboard(HIDDevice):
 
             ReportCount(1),
             ReportSize(8),
-            Input(DataFlag.CONSTANT, DataFlag.VARIABLE),
+            Input(DataFlag.CONSTANT | DataFlag.VARIABLE),
 
             ReportCount(5),
             ReportSize(1),
@@ -93,7 +93,7 @@ class Keyboard(HIDDevice):
 
             ReportCount(1),
             ReportSize(3),
-            Output(DataFlag.CONSTANT, DataFlag.VARIABLE),
+            Output(DataFlag.CONSTANT | DataFlag.VARIABLE),
 
             ReportCount(6),
             ReportSize(8),
@@ -102,14 +102,14 @@ class Keyboard(HIDDevice):
             UsagePage(7),
             UsageMinimum(0),
             UsageMaximum(0x65),
-            Input(),
+            Input(0),
         ),
         EndCollection()
     ))
     PROTOCOL = ProtocolCode.KEYBOARD
     SUBCLASS = SubclassCode.BOOT_INTERFACE
 
-    def write(self, text: str) -> None:
+    def type(self, text: str) -> None:
         for c in text:
             self.send_report(KeyboardReport(mods=Modifier.from_char(c), keys=(c_ubyte * 6)(KeyCode.KEYBOARD[c])))
             self.send_report(KeyboardReport())

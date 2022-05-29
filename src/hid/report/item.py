@@ -34,6 +34,7 @@ _BT = TypeVar('_BT', bound='BaseItem')
 
 class BaseItem(bytes):
     PREFIX: int = NotImplemented
+    SIGNED = False
     _PREFIX_MASK = 0b11111100
     _SIZE_MASK = 0b00000011
     _SIZES = (0, 1, 2, 4)
@@ -42,7 +43,7 @@ class BaseItem(bytes):
         if cls.PREFIX is NotImplemented:
             raise NotImplementedError
 
-        b = bytearray([cls.PREFIX])
+        x = bytearray([cls.PREFIX])
         if prefix_data is not None:
             if isinstance(prefix_data, (Iterable, SupportsBytes)):
                 b = bytes(prefix_data)
@@ -50,20 +51,21 @@ class BaseItem(bytes):
                     raise ValueError
             elif isinstance(prefix_data, SupportsIndex):
                 n = int(prefix_data)
-                #                         sign bit
-                #                             v
-                size = ceil((n.bit_length() + 1) / 8)
+                if n == 0: # bit_length() of 0 is 0
+                    size = 1
+                else:
+                    # sign bit (not included in bit_length)
+                    #                                   vvv
+                    size = ceil((n.bit_length() + int(cls.SIGNED)) / 8)
                 min_size = min([x for x in cls._SIZES if x >= size])
-
-                b = n.to_bytes(min_size, 'little', signed=True)
+                b = n.to_bytes(min_size, 'little', signed=cls.SIGNED)
             else:
                 raise TypeError
 
-            x = bytearray([cls.PREFIX])
             x[0] |= cls._SIZES.index(len(b))
             x += b
 
-        return super().__new__(cls, b)
+        return super().__new__(cls, x)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -82,10 +84,9 @@ class BaseItem(bytes):
 
     @classmethod
     def from_bytes(cls, b: bytes) -> BaseItem:
-        size = b[0] & cls._SIZE_MASK
-        for c in filter(lambda d: d.PREFIX is not NotImplemented, deep_subclasses(cls)):
-            inverted_size_mask = ((1 << 8) - 1) ^ cls._SIZE_MASK
-            if b[0] & inverted_size_mask == c.PREFIX:
+        for c in filter(lambda x: x.PREFIX is not NotImplemented, deep_subclasses(cls)):
+            if b[0] & cls._PREFIX_MASK == c.PREFIX:
+                size = cls._SIZES[b[0] & cls._SIZE_MASK]
                 return c(b[1:1 + size])
         raise ValueError
 
@@ -108,17 +109,37 @@ class BaseMainItem(BaseItem):
 class Input(BaseMainItem):
     PREFIX = 0b10000000
 
+    def __new__(cls, prefix_data: Optional[ConvertibleToBytes] = None):
+        if prefix_data is None:
+            prefix_data = bytes([0])
+        return super().__new__(cls, prefix_data)
+
 
 class Output(BaseMainItem):
     PREFIX = 0b10010000
+
+    def __new__(cls, prefix_data: Optional[ConvertibleToBytes] = None):
+        if prefix_data is None:
+            prefix_data = bytes([0])
+        return super().__new__(cls,  prefix_data)
 
 
 class Feature(BaseMainItem):
     PREFIX = 0b10110000
 
+    def __new__(cls, prefix_data: Optional[ConvertibleToBytes] = None):
+        if prefix_data is None:
+            prefix_data = bytes([0])
+        return super().__new__(cls, prefix_data)
+
 
 class Collection(BaseMainItem):
     PREFIX = 0b10100000
+
+    def __new__(cls, prefix_data: Optional[ConvertibleToBytes] = None):
+        if prefix_data is None:
+            prefix_data = bytes([0])
+        return super().__new__(cls, prefix_data)
 
 
 class EndCollection(BaseMainItem):
@@ -140,18 +161,22 @@ class UsagePage(BaseGlobalItem):
 
 class LogicalMinimum(BaseGlobalItem):
     PREFIX = 0b00010100
+    SIGNED = True
 
 
 class LogicalMaximum(BaseGlobalItem):
     PREFIX = 0b00100100
+    SIGNED = True
 
 
 class PhysicalMinimum(BaseGlobalItem):
     PREFIX = 0b00110100
+    SIGNED = True
 
 
 class PhysicalMaximum(BaseGlobalItem):
     PREFIX = 0b01000100
+    SIGNED = True
 
 
 class UnitExponent(BaseGlobalItem):

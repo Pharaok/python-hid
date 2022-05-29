@@ -2,9 +2,7 @@ import os
 import shutil
 from collections.abc import Iterable, MutableMapping, Iterator, Mapping
 from dataclasses import dataclass
-from math import ceil
-from typing import SupportsIndex, Literal, Any, Union, Type, TypeVar, Optional
-
+from typing import SupportsIndex, Any, Union, Type, TypeVar, Optional
 
 _KT = str
 _VT = Union[str, bytes, 'SymLink', 'Directory']
@@ -94,11 +92,6 @@ class Directory(MutableMapping[_KT, _VT]):
 
 ConvertibleToBytes = Union[SupportsIndex, Iterable[SupportsIndex]]
 
-def int_to_min_bytes(n: SupportsIndex, byteorder: Literal['little', 'big'] = 'little') -> bytes:
-    n = int(n)
-    min_len = max(1, ceil(n.bit_length() / 8))
-    return n.to_bytes(min_len, byteorder)
-
 
 def flatten(it: Iterable[Any], ignore: Union[Type[Any], tuple[Type[Any], ...]] = ()) -> list[Any]:
     flattened = []
@@ -110,14 +103,6 @@ def flatten(it: Iterable[Any], ignore: Union[Type[Any], tuple[Type[Any], ...]] =
         else:
             flattened.append(x)
     return flattened
-
-
-def convert_to_bytes(x: ConvertibleToBytes) -> bytes:
-    if isinstance(x, SupportsIndex):
-        b = int_to_min_bytes(x)
-    else:
-        b = bytes(x)
-    return b
 
 
 _T = TypeVar('_T')
