@@ -16,7 +16,6 @@ class SymLink:
 
 class Directory(MutableMapping[_KT, _VT]):
     def __init__(self, path: str, m: Optional[_GT] = None) -> None:
-        self._path = ''
         self.path = path
         os.makedirs(self.path, exist_ok=True)
 
@@ -26,15 +25,15 @@ class Directory(MutableMapping[_KT, _VT]):
             self[k] = v
 
     @property
-    def path(self) -> str:
-        return self._path
+    def path(self) -> Optional[str]:
+        return self._path if hasattr(self, '_path') else None
 
     @path.setter
     def path(self, path: str) -> None:
         p = str(os.path.abspath(path))
-        if self._path:
-            shutil.copytree(self._path, p, dirs_exist_ok=True)
-            shutil.rmtree(self._path)
+        if self.path is not None:
+            shutil.copytree(self.path, p, dirs_exist_ok=True)
+            shutil.rmtree(self.path)
         self._path = p
 
     def __getitem__(self, k: _KT) -> _VT:
@@ -54,7 +53,7 @@ class Directory(MutableMapping[_KT, _VT]):
         p = os.path.abspath(self.path + os.sep + k)
 
         if not p.startswith(self.path):
-            raise ValueError(f'Path is outside {self.path}.')
+            raise ValueError(f'Path is outside of {self.path}.')
 
         if isinstance(v, Mapping):
             d = Directory(p)

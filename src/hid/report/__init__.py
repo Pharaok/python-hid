@@ -1,9 +1,7 @@
 """https://www.usb.org/sites/default/files/hid1_11.pdf"""
 from __future__ import annotations
 
-from collections.abc import Iterable
-from math import ceil
-from typing import Union, Generator, SupportsBytes
+from typing import Union, Generator
 
 from hid.helpers import flatten
 from .item import *

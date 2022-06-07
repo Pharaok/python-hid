@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import os
 import threading
 from collections.abc import Iterable
 from types import TracebackType
-from typing import Optional, SupportsIndex, SupportsBytes, Type, Literal, TypeVar
+from typing import Optional, SupportsIndex, SupportsBytes, Type, Literal
+
+from typing_extensions import Self
 
 from hid.gadget import Gadget
 from hid.report import ReportDescriptor, ProtocolCode, SubclassCode
 
-_T_HIDDevice = TypeVar('_T_HIDDevice', bound='HIDDevice')
 
 class HIDDevice:
     DESCRIPTOR: ReportDescriptor = NotImplemented
@@ -16,17 +18,20 @@ class HIDDevice:
     SUBCLASS = SubclassCode.NONE
 
     def __init__(self, gadget: Optional[Gadget] = None) -> None:
+        created_gadget = False
         if gadget is None:
             gadget = Gadget()
+            created_gadget = True
         self.gadget = gadget
 
-        self.function = gadget.add_function({
+        self.function = self.gadget.add_function({
             'protocol': f'{ProtocolCode.KEYBOARD}',
             'subclass': f'{SubclassCode.BOOT_INTERFACE}',
             'report_length': f'{self.DESCRIPTOR.input_len}',
             'report_desc': self.DESCRIPTOR
         })
-        self.gadget.enabled = True
+        if created_gadget:
+            self.gadget.enabled = True
 
         dev = self.function['dev']
         if not isinstance(dev, str):
@@ -37,23 +42,25 @@ class HIDDevice:
 
     def send_report(self, report: SupportsBytes | Iterable[SupportsIndex]) -> None:
         report = bytes(report)
-        if not self.gadget.enabled:
-            raise Exception
+        if not os.path.exists(self.dev):
+            raise FileNotFoundError
         if not self.DESCRIPTOR.validate_input_report(report):
             raise ValueError
-        with open(self.dev, "wb") as f:
-            f.write(report)
+        with open(self.dev, 'wb') as fd:
+            fd.write(report)
 
     def _listener(self) -> None:
-        while True:
+        while os.path.exists(self.dev):
             with open(self.dev, 'rb') as fd:
                 self.output = fd.read(self.DESCRIPTOR.output_len)
 
-    def __enter__(self) -> _T_HIDDevice:
+    def __enter__(self) -> Self:
+        self.gadget.enabled = True
         return self
 
     def __exit__(self,
                  exc_type: Optional[Type[BaseException]],
                  exc_val: Optional[BaseException],
                  exc_tb: Optional[TracebackType]) -> Literal[False]:
+        self.gadget.close()
         return False

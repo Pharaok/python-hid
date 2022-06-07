@@ -4,15 +4,15 @@ import os
 import platform
 from collections.abc import Sequence
 from types import TracebackType
-from typing import Mapping, Optional, Union, TypeVar, Type, Literal
+from typing import Mapping, Optional, Union, Type, Literal
+
+from typing_extensions import Self
 
 from hid.helpers import Directory, SymLink
 
 _KT = str
 _VT = Union[str, bytes, 'SymLink', 'Directory']
 _GT = Mapping[_KT, Union[_VT, '_GT']]  # type: ignore
-
-_T_Gadget = TypeVar('_T_Gadget', bound='Gadget')
 
 
 class Gadget:
@@ -68,7 +68,7 @@ class Gadget:
             except FileNotFoundError:
                 pass
 
-    def __enter__(self) -> _T_Gadget:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self,
@@ -104,12 +104,13 @@ class Gadget:
 
     @enabled.setter
     def enabled(self, b: bool) -> None:
-        if b:
+        if b and not self.enabled:
             if self.udc is None:
                 raise Exception('No UDC chosen.')
             self.configfs['UDC'] = self.udc
         else:
             self.configfs['UDC'] = ''
+            print(self.configfs['UDC'])
 
     @property
     def udc(self) -> Optional[str]:
