@@ -3,10 +3,12 @@ from __future__ import annotations
 import string
 from ctypes import Structure, c_ubyte
 
+from typing_extensions import Self
+
 from hid.report import ProtocolCode, SubclassCode, ReportDescriptor
 from hid.report.item import *
 from hid.report.usage import UsagePages, LED
-from . import HIDDevice
+from .hid_device import HIDDevice
 
 
 class Modifier(IntFlag):
@@ -109,10 +111,11 @@ class Keyboard(HIDDevice):
     PROTOCOL = ProtocolCode.KEYBOARD
     SUBCLASS = SubclassCode.BOOT_INTERFACE
 
-    def type(self, text: str) -> None:
+    def type(self, text: str) -> Self:
         for c in text:
             self.send_report(KeyboardReport(mods=Modifier.from_char(c), keys=(c_ubyte * 6)(KeyCode.KEYBOARD[c])))
             self.send_report(KeyboardReport())
+        return self
 
     @property
     def num_lock(self) -> bool:

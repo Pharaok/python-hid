@@ -8,8 +8,7 @@ from typing import Literal
 from hid.report import ProtocolCode, SubclassCode, ReportDescriptor
 from hid.report.item import *
 from hid.report.usage import UsagePages
-from . import HIDDevice
-from ..gadget import Gadget
+from .hid_device import HIDDevice
 
 
 class MouseButton(IntEnum):
@@ -63,12 +62,12 @@ class Mouse(HIDDevice):
     PROTOCOL = ProtocolCode.MOUSE
     SUBCLASS = SubclassCode.BOOT_INTERFACE
 
-    def __init__(self, gadget: Optional[Gadget] = None, frequency: int = 250):
+    def __init__(self, *args, frequency: int = 250):
         self.frequency = frequency
-        self.buttons = 0
+        self._buttons = 0
         self._x = 0
         self._y = 0
-        super().__init__(gadget)
+        super().__init__(*args)
 
     def move(self, x: float = 0, y: float = 0, t: float = 0) -> Mouse:
         t = max(t, 1 / self.frequency)
@@ -76,9 +75,9 @@ class Mouse(HIDDevice):
         n = floor(t * self.frequency)
 
         if not (-127 <= x / n <= 127 and -127 <= y / n <= 127):
-            raise ValueError
+            raise ValueError("Can't move that fast")
 
-        report = MouseReport(self.buttons)
+        report = MouseReport(self._buttons)
         for _ in range(n):
             self._x += x / n
             self._y += y / n
@@ -93,16 +92,16 @@ class Mouse(HIDDevice):
 
     def click(self, button: int = MouseButton.LEFT, direction: Literal['up', 'down', 'both'] = 'both') -> Mouse:
         if direction in ['down', 'both']:
-            self.buttons |= button
-            self.send_report(MouseReport(self.buttons))
+            self._buttons |= button
+            self.send_report(MouseReport(self._buttons))
             sleep(1 / self.frequency)
         if direction in ['up', 'both']:
-            self.buttons &= ~button
-            self.send_report(MouseReport(self.buttons))
+            self._buttons &= ~button
+            self.send_report(MouseReport(self._buttons))
             sleep(1 / self.frequency)
         else:
             raise ValueError
         return self
 
     def __enter__(self) -> Mouse:
-        return super().__enter__()            
+        return super().__enter__()
