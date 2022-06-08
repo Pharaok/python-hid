@@ -110,7 +110,6 @@ class Gadget:
             self.configfs['UDC'] = self.udc
         else:
             self.configfs['UDC'] = ''
-            print(self.configfs['UDC'])
 
     @property
     def udc(self) -> Optional[str]:
@@ -133,6 +132,7 @@ class Gadget:
 
     def add_function(self, function: _GT, name: str = 'hid') -> Directory:
         n = f'{name}.usb{self._function_count}'
+        self._function_count += 1
 
         self.configfs[f'functions/{n}'] = function
         f = self.configfs[f'functions/{n}']
